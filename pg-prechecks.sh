@@ -36,14 +36,20 @@ collect_pg_info() {
     # Database sizes
     run_query "SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database ORDER BY pg_database_size(datname) DESC;" > "$OUTPUT_DIR/database_sizes.txt"
 
-    # Table and index sizes (top 20)
-    run_query "SELECT schemaname || '.' || tablename AS table_name, 
-               pg_size_pretty(pg_total_relation_size(schemaname || '.' || tablename)) AS total_size,
-               pg_size_pretty(pg_table_size(schemaname || '.' || tablename)) AS table_size,
-               pg_size_pretty(pg_indexes_size(schemaname || '.' || tablename)) AS index_size
-               FROM pg_tables 
-               ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC 
-               LIMIT 20;" > "$OUTPUT_DIR/table_index_sizes.txt"
+    # Table and index sizes (top 20) with headers
+    {
+        echo "Total Number of Indexes: $(run_query "SELECT count(*) FROM pg_indexes;")"
+        echo ""
+        echo "Table Name | Total Size | Table Size | Index Size"
+        echo "-----------|------------|------------|------------"
+        run_query "SELECT schemaname || '.' || tablename AS table_name, 
+                   pg_size_pretty(pg_total_relation_size(schemaname || '.' || tablename)) AS total_size,
+                   pg_size_pretty(pg_table_size(schemaname || '.' || tablename)) AS table_size,
+                   pg_size_pretty(pg_indexes_size(schemaname || '.' || tablename)) AS index_size
+                   FROM pg_tables 
+                   ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC 
+                   LIMIT 20;"
+    } > "$OUTPUT_DIR/table_index_sizes.txt"
 
     # Settings
     run_query "SELECT name, setting, unit, context FROM pg_settings ORDER BY name;" > "$OUTPUT_DIR/settings.txt"
@@ -54,8 +60,22 @@ collect_pg_info() {
     # Activity
     run_query "SELECT * FROM pg_stat_activity;" > "$OUTPUT_DIR/activity.txt"
 
-    # Indexes
-    run_query "SELECT schemaname, tablename, indexname, indexdef FROM pg_indexes ORDER BY schemaname, tablename;" > "$OUTPUT_DIR/indexes.txt"
+    # Indexes (with headers and count)
+    {
+        echo "Total Number of Indexes: $(run_query "SELECT count(*) FROM pg_indexes;")"
+        echo ""
+        echo "Database | Schema | Table | Index Name | Index Size | Index Definition"
+        echo "----------|--------|--------|------------|------------|------------------"
+        run_query "SELECT 
+                    current_database() as database,
+                    schemaname,
+                    tablename,
+                    indexname,
+                    pg_size_pretty(pg_relation_size(schemaname || '.' || indexname::text)) as index_size,
+                    indexdef
+                  FROM pg_indexes
+                  ORDER BY pg_relation_size(schemaname || '.' || indexname::text) DESC;"
+    } > "$OUTPUT_DIR/indexes.txt"
 
     # Roles
     run_query "SELECT * FROM pg_roles;" > "$OUTPUT_DIR/roles.txt"
