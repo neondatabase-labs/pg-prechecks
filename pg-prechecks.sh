@@ -154,6 +154,86 @@ collect_pg_info() {
                evtenabled AS trigger_enabled
                FROM pg_event_trigger
                ORDER BY evtname;" >> "$OUTPUT_DIR/event_triggers.txt"
+
+    # User-defined functions
+    {
+        echo "Total Number of User-Defined Functions: $(run_query "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname NOT IN ('pg_catalog', 'information_schema');")"
+        echo ""
+        echo "Database | Schema | Function Name | Return Type | Language | Arguments | Volatility | Parallel | Security | Cost | Rows | Owner | Description"
+        echo "----------|---------|--------------|-------------|----------|-----------|------------|----------|----------|------|------|--------|-------------"
+        run_query "SELECT 
+                    current_database() as database,
+                    n.nspname as schema,
+                    p.proname as function_name,
+                    pg_get_function_result(p.oid) as return_type,
+                    l.lanname as language,
+                    pg_get_function_arguments(p.oid) as arguments,
+                    CASE p.provolatile 
+                        WHEN 'i' THEN 'IMMUTABLE'
+                        WHEN 's' THEN 'STABLE'
+                        WHEN 'v' THEN 'VOLATILE'
+                    END as volatility,
+                    CASE p.proparallel
+                        WHEN 'r' THEN 'RESTRICTED'
+                        WHEN 's' THEN 'SAFE'
+                        WHEN 'u' THEN 'UNSAFE'
+                    END as parallel,
+                    CASE WHEN p.prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END as security,
+                    p.procost as cost,
+                    p.prorows as estimated_rows,
+                    pg_get_userbyid(p.proowner) as owner,
+                    d.description as description
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                JOIN pg_language l ON p.prolang = l.oid
+                LEFT JOIN pg_description d ON p.oid = d.objoid
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                ORDER BY n.nspname, p.proname;"
+    } > "$OUTPUT_DIR/user_defined_functions.txt"
+
+    # Also add function source code in a separate file
+    {
+        echo "User-Defined Functions Source Code"
+        echo "================================="
+        echo ""
+        run_query "SELECT 
+                    '-- Function: ' || n.nspname || '.' || p.proname || E'\n' ||
+                    '-- Owner: ' || pg_get_userbyid(p.proowner) || E'\n' ||
+                    CASE WHEN d.description IS NOT NULL 
+                        THEN '-- Description: ' || d.description || E'\n' 
+                        ELSE '' 
+                    END ||
+                    E'--\n' ||
+                    '-- Source code:\n' ||
+                    pg_get_functiondef(p.oid) || E'\n\n'
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                LEFT JOIN pg_description d ON p.oid = d.objoid
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                ORDER BY n.nspname, p.proname;"
+    } > "$OUTPUT_DIR/user_defined_functions_source.txt"
+
+    # Sequences information
+    {
+        echo "Total Number of Sequences: $(run_query "SELECT count(*) FROM pg_sequences;")"
+        echo ""
+        echo "Database | Schema | Sequence Name | Data Type | Start Value | Min Value | Max Value | Increment | Cycle | Cache | Last Value"
+        echo "----------|---------|---------------|------------|-------------|-----------|------------|-----------|--------|--------|------------"
+        run_query "SELECT 
+                    current_database() as database,
+                    schemaname as schema,
+                    sequencename as sequence_name,
+                    data_type,
+                    start_value,
+                    min_value,
+                    max_value,
+                    increment_by,
+                    CASE WHEN cycle THEN 'YES' ELSE 'NO' END as cycle,
+                    cache_size as cache,
+                    last_value
+                FROM pg_sequences
+                ORDER BY schemaname, sequencename;"
+    } > "$OUTPUT_DIR/sequences.txt"
 }
 
 # Function to generate summary report
@@ -247,6 +327,22 @@ generate_report() {
             cat "$OUTPUT_DIR/event_triggers.txt"
         else
             echo "No event triggers found."
+        fi
+        echo
+
+        echo "## User-Defined Functions"
+        if [ -s "$OUTPUT_DIR/user_defined_functions.txt" ]; then
+            cat "$OUTPUT_DIR/user_defined_functions.txt"
+        else
+            echo "No user-defined functions found."
+        fi
+        echo
+
+        echo "## User-Defined Functions Source Code"
+        if [ -s "$OUTPUT_DIR/user_defined_functions_source.txt" ]; then
+            cat "$OUTPUT_DIR/user_defined_functions_source.txt"
+        else
+            echo "No user-defined functions source code found."
         fi
         echo
 
