@@ -71,7 +71,7 @@ Use it in a secure environment and avoid exposing passwords in command-line argu
 
 2. Run the script with the required parameters:
    ```
-   ./pg-prechecks --host=your-db-host --user=your-username --password=your-password [options]
+   ./pg-prechecks.sh --host=your-db-host --user=your-username --password=your-password [options]
    ```
 
    Required parameters:
