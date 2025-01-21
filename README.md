@@ -40,7 +40,7 @@ Use it in a secure environment and avoid exposing passwords in command-line argu
 
 - Collects version information
 - Lists databases and their sizes
-- Reports top 20 table and index sizes
+- Reports all the tables and index sizes
 - Retrieves important configuration settings
 - Lists installed extensions
 - Provides a summary of current database activity
