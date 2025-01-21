@@ -39,6 +39,7 @@ collect_pg_info() {
     # Table and index sizes (top 20) with headers
     {
         echo "Total Number of Indexes: $(run_query "SELECT count(*) FROM pg_indexes;")"
+        echo "Total Number of Tables: $(run_query "SELECT count(*) FROM pg_tables;")"
         echo ""
         echo "Table Name | Total Size | Table Size | Index Size"
         echo "-----------|------------|------------|------------"
