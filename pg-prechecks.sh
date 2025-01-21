@@ -47,8 +47,7 @@ collect_pg_info() {
                    pg_size_pretty(pg_table_size(schemaname || '.' || tablename)) AS table_size,
                    pg_size_pretty(pg_indexes_size(schemaname || '.' || tablename)) AS index_size
                    FROM pg_tables 
-                   ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC 
-                   LIMIT 20;"
+                   ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC"
     } > "$OUTPUT_DIR/table_index_sizes.txt"
 
     # Settings
