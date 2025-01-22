@@ -19,6 +19,7 @@ run_query() {
 
 # Function to collect PostgreSQL information
 collect_pg_info() {
+    echo "Collecting PostgreSQL information..."
     mkdir -p "$OUTPUT_DIR"
 
     # Check for logical replication support
@@ -196,21 +197,7 @@ collect_pg_info() {
         echo "User-Defined Functions Source Code"
         echo "================================="
         echo ""
-        run_query "SELECT 
-                    '-- Function: ' || n.nspname || '.' || p.proname || E'\n' ||
-                    '-- Owner: ' || pg_get_userbyid(p.proowner) || E'\n' ||
-                    CASE WHEN d.description IS NOT NULL 
-                        THEN '-- Description: ' || d.description || E'\n' 
-                        ELSE '' 
-                    END ||
-                    E'--\n' ||
-                    '-- Source code:\n' ||
-                    pg_get_functiondef(p.oid) || E'\n\n'
-                FROM pg_proc p
-                JOIN pg_namespace n ON p.pronamespace = n.oid
-                LEFT JOIN pg_description d ON p.oid = d.objoid
-                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-                ORDER BY n.nspname, p.proname;"
+        run_query "SELECT pg_get_functiondef(f.oid) FROM pg_catalog.pg_proc f INNER JOIN pg_catalog.pg_namespace n ON (f.pronamespace = n.oid) WHERE n.nspname = 'public';"
     } > "$OUTPUT_DIR/user_defined_functions_source.txt"
 
     # Sequences information
@@ -238,6 +225,7 @@ collect_pg_info() {
 
 # Function to generate summary report
 generate_report() {
+    echo "Generating summary report..."
     {
         echo "# PostgreSQL Pre-Check Report"
         echo "Date: $(date)"
@@ -452,13 +440,10 @@ capture_table_details() {
 
 # Modify the main function to include the new capture_table_details function
 main() {
-    echo "Collecting PostgreSQL information..."
     collect_pg_info
 
-    echo "Capturing detailed table information..."
     capture_table_details
 
-    echo "Generating summary report..."
     generate_report
 
     if [ "$PERFORM_DUMP" = true ]; then
