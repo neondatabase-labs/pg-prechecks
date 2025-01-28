@@ -17,11 +17,6 @@ run_query() {
     psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "$1"
 }
 
-# Function to properly quote identifiers
-quote_identifier() {
-    echo "\"$1\""
-}
-
 # Function to collect PostgreSQL information
 collect_pg_info() {
     echo "Collecting PostgreSQL information..."
