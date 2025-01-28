@@ -44,12 +44,13 @@ collect_pg_info() {
         echo ""
         echo "Table Name | Total Size | Table Size | Index Size"
         echo "-----------|------------|------------|------------"
-        run_query "SELECT schemaname || '.' || tablename AS table_name, 
-                   pg_size_pretty(pg_total_relation_size(schemaname || '.' || tablename)) AS total_size,
-                   pg_size_pretty(pg_table_size(schemaname || '.' || tablename)) AS table_size,
-                   pg_size_pretty(pg_indexes_size(schemaname || '.' || tablename)) AS index_size
+        run_query "SELECT 
+                   quote_ident(schemaname) || '.' || quote_ident(tablename) AS table_name,
+                   pg_size_pretty(pg_total_relation_size(quote_ident(schemaname) || '.' || quote_ident(tablename))) AS total_size,
+                   pg_size_pretty(pg_table_size(quote_ident(schemaname) || '.' || quote_ident(tablename))) AS table_size,
+                   pg_size_pretty(pg_indexes_size(quote_ident(schemaname) || '.' || quote_ident(tablename))) AS index_size
                    FROM pg_tables 
-                   ORDER BY pg_total_relation_size(schemaname || '.' || tablename) DESC;"
+                   ORDER BY pg_total_relation_size(quote_ident(schemaname) || '.' || quote_ident(tablename)) DESC;"
     } > "$OUTPUT_DIR/table_index_sizes.txt"
 
     # Settings
@@ -72,10 +73,10 @@ collect_pg_info() {
                     schemaname,
                     tablename,
                     indexname,
-                    pg_size_pretty(pg_relation_size(schemaname || '.' || indexname::text)) as index_size,
+                    pg_size_pretty(pg_relation_size(quote_ident(schemaname) || '.' || quote_ident(indexname)::text)) as index_size,
                     indexdef
                   FROM pg_indexes
-                  ORDER BY pg_relation_size(schemaname || '.' || indexname::text) DESC;"
+                  ORDER BY pg_relation_size(quote_ident(schemaname) || '.' || quote_ident(indexname)::text) DESC;"
     } > "$OUTPUT_DIR/indexes.txt"
 
     # Roles
@@ -344,20 +345,25 @@ perform_version_agnostic_dump() {
     echo "Performing database dump..."
     DUMP_FILE="$OUTPUT_DIR/database_dump.sql"
     
-    # Dump schema (keep this part as it was)
+    # Dump schema
     echo "-- Schema dump" > "$DUMP_FILE"
     PGPASSWORD=$PGPASSWORD psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "
-    -- Schemas
-    SELECT 'CREATE SCHEMA IF NOT EXISTS ' || quote_ident(nspname) || ';'
-    FROM pg_namespace
-    WHERE nspname NOT IN ('public', 'information_schema', 'pg_catalog', 'pg_toast');
-
     -- Tables
-    SELECT 'CREATE TABLE ' || quote_ident(n.nspname) || '.' || quote_ident(c.relname) || ' (' ||
-           string_agg(quote_ident(a.attname) || ' ' || pg_catalog.format_type(a.atttypid, a.atttypmod) ||
-                      CASE WHEN a.attnotnull THEN ' NOT NULL' ELSE '' END ||
-                      CASE WHEN ad.adbin IS NOT NULL THEN ' DEFAULT ' || pg_get_expr(ad.adbin, ad.adrelid) ELSE '' END,
-                      ', ') || ');'
+    SELECT format('CREATE TABLE IF NOT EXISTS %I.%I (%s);',
+           n.nspname,
+           c.relname,
+           string_agg(
+               format('%I %s%s%s',
+                   a.attname,
+                   pg_catalog.format_type(a.atttypid, a.atttypmod),
+                   CASE WHEN a.attnotnull THEN ' NOT NULL' ELSE '' END,
+                   CASE WHEN ad.adbin IS NOT NULL 
+                        THEN ' DEFAULT ' || pg_get_expr(ad.adbin, ad.adrelid) 
+                        ELSE '' END
+               ),
+               ', '
+           )
+    )
     FROM pg_class c
     JOIN pg_namespace n ON c.relnamespace = n.oid
     JOIN pg_attribute a ON c.oid = a.attrelid
@@ -393,7 +399,7 @@ perform_version_agnostic_dump() {
     # Dump data (modified part)
     echo "-- Data dump" >> "$DUMP_FILE"
     PGPASSWORD=$PGPASSWORD psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "
-    SELECT quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS full_table_name
+    SELECT format('%I.%I', n.nspname, c.relname) AS full_table_name
     FROM pg_class c
     JOIN pg_namespace n ON c.relnamespace = n.oid
     WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema');" | while read -r table; do
@@ -422,8 +428,12 @@ capture_table_details() {
     echo "===========================" >> "$TABLE_DETAILS_FILE"
     echo "" >> "$TABLE_DETAILS_FILE"
 
-    # Get list of all tables
-    tables=$(PGPASSWORD=$PGPASSWORD psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "SELECT schemaname || '.' || tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') ORDER BY schemaname, tablename;")
+    # Get list of all tables with proper quoting
+    tables=$(PGPASSWORD=$PGPASSWORD psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "
+        SELECT format('%I.%I', schemaname, tablename) 
+        FROM pg_tables 
+        WHERE schemaname NOT IN ('pg_catalog', 'information_schema') 
+        ORDER BY schemaname, tablename;")
 
     # Loop through each table and capture \d+ output
     while read -r table; do
