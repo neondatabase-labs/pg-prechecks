@@ -192,36 +192,6 @@ collect_pg_info() {
                 WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
                 ORDER BY n.nspname, p.proname;"
     } > "${OUTPUT_DIR}/user_defined_functions.txt"
-
-    # Also add function source code in a separate file
-    {
-        echo "User-Defined Functions Source Code"
-        echo "================================="
-        echo ""
-        run_query "SELECT pg_get_functiondef(f.oid) FROM pg_catalog.pg_proc f INNER JOIN pg_catalog.pg_namespace n ON (f.pronamespace = n.oid) WHERE n.nspname = 'public';"
-    } > "${OUTPUT_DIR}/user_defined_functions_source.txt"
-
-    # Sequences information
-    {
-        echo "Total Number of Sequences: $(run_query "SELECT count(*) FROM pg_sequences;")"
-        echo ""
-        echo "Database | Schema | Sequence Name | Data Type | Start Value | Min Value | Max Value | Increment | Cycle | Cache | Last Value"
-        echo "----------|---------|---------------|------------|-------------|-----------|------------|-----------|--------|--------|------------"
-        run_query "SELECT 
-                    current_database() as database,
-                    schemaname as schema,
-                    sequencename as sequence_name,
-                    data_type,
-                    start_value,
-                    min_value,
-                    max_value,
-                    increment_by,
-                    CASE WHEN cycle THEN 'YES' ELSE 'NO' END as cycle,
-                    cache_size as cache,
-                    last_value
-                FROM pg_sequences
-                ORDER BY schemaname, sequencename;"
-    } > "${OUTPUT_DIR}/sequences.txt"
 }
 
 # Function to generate summary report
@@ -324,14 +294,6 @@ generate_report() {
             cat "${OUTPUT_DIR}/user_defined_functions.txt"
         else
             echo "No user-defined functions found."
-        fi
-        echo
-
-        echo "## User-Defined Functions Source Code"
-        if [ -s "${OUTPUT_DIR}/user_defined_functions_source.txt" ]; then
-            cat "${OUTPUT_DIR}/user_defined_functions_source.txt"
-        else
-            echo "No user-defined functions source code found."
         fi
         echo
 
